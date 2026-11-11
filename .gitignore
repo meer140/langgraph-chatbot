@@ -1,0 +1,5 @@
+_pycache_
+chats.db
+
+chats.db-shm
+chats.db-wal
