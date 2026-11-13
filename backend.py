@@ -1,7 +1,6 @@
 from langgraph.graph import StateGraph, START, END
 from typing import Annotated, Any, Dict, Optional, TypedDict
 from langchain_core.messages import BaseMessage,HumanMessage,SystemMessage,RemoveMessage
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
@@ -12,13 +11,14 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import tool
 from langgraph.graph.message import add_messages
 from dotenv import load_dotenv
-import sqlite3
+from langgraph.checkpoint.postgres import PostgresSaver
+from psycopg_pool import ConnectionPool
 import os
 import tempfile
 
 load_dotenv()
 
-model = ChatGoogleGenerativeAI(model="gemini-3.8-flash")
+model = ChatGoogleGenerativeAI(model="gemini-3.5-flash-lite")
 embedding_model = GoogleGenerativeAIEmbeddings(model="gemini-embedding-2")
 
 
@@ -240,16 +240,38 @@ def summarize(state: ChatState):
     }
 
 
-def should_summarize(state:ChatState):
-    return len(state['messages']) > 6
+def route_after_chat(state: ChatState):
+
+    last_message = state["messages"][-1]
+
+    # Execute tools first
+    if getattr(last_message, "tool_calls", None):
+        return "tools"
+
+    # Summarize if necessary
+    if len(state["messages"]) > 6:
+        return "summarize"
+
+    return END
 
 
 tool_node = ToolNode(tools)
 
-conn = sqlite3.connect(database="chats.db", check_same_thread=False)
+DB_URI = os.getenv("DB_URI")
 
-# Checkpointer
-checkPointer = SqliteSaver(conn=conn)
+pool = ConnectionPool(
+    conninfo=DB_URI,
+    max_size=10,
+    kwargs={
+        "autocommit": True,
+        "prepare_threshold": 0
+    }
+)
+
+checkPointer = PostgresSaver(pool)
+
+# Run once when initializing the database
+checkPointer.setup()
 
 graph = StateGraph(ChatState)
 graph.add_node("chat_node", chat_node)
@@ -257,17 +279,18 @@ graph.add_node("tools",tool_node)
 graph.add_node("summarize",summarize)
 
 graph.add_edge(START, "chat_node")
-graph.add_conditional_edges("chat_node",tools_condition)
-graph.add_edge("tools","chat_node") 
 graph.add_conditional_edges(
-    'chat_node',
-        should_summarize,
-        {
-            True : "summarize", 
-            False : "__end__"
-        }
+    "chat_node",
+    route_after_chat,
+    {
+        "tools": "tools",
+        "summarize": "summarize",
+        END: END
+    }
 )
-graph.add_edge('summarize',"__end__")
+
+graph.add_edge("tools", "chat_node")
+graph.add_edge("summarize", END)
 
 
 
