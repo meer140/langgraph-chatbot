@@ -1,5 +1,5 @@
 __pycache__
 chats.db
-
+.streamlit
 chats.db-shm
 chats.db-wal

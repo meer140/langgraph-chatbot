@@ -4,6 +4,7 @@ from langchain_core.messages import BaseMessage,HumanMessage,SystemMessage,Remov
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
+import faiss
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.tools import DuckDuckGoSearchRun
@@ -270,8 +271,16 @@ pool = ConnectionPool(
 
 checkPointer = PostgresSaver(pool)
 
-# Run once when initializing the database
-checkPointer.setup()
+# Create application-specific table
+with pool.connection() as conn:
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS app_user_threads (
+                user_id TEXT NOT NULL,
+                thread_id TEXT PRIMARY KEY,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
 
 graph = StateGraph(ChatState)
 graph.add_node("chat_node", chat_node)
@@ -310,3 +319,46 @@ def thread_has_document(thread_id: str) -> bool:
 
 def thread_document_metadata(thread_id: str) -> dict:
     return _THREAD_METADATA.get(str(thread_id), {})
+
+def user_owns_thread(user_id: str, thread_id: str):
+
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM app_user_threads
+                    WHERE user_id = %s
+                    AND thread_id = %s
+                )
+            """, (user_id, thread_id))
+
+            return cur.fetchone()[0]
+
+def create_user_thread(user_id: str, thread_id: str):
+
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO app_user_threads (user_id, thread_id)
+                VALUES (%s, %s)
+                ON CONFLICT (thread_id) DO NOTHING
+            """, (user_id, thread_id))
+
+    if not user_owns_thread(user_id, thread_id):
+        raise PermissionError("Thread ownership conflict.")
+
+def retrieve_user_threads(user_id: str):
+
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT thread_id
+                FROM app_user_threads
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+            """, (user_id,))
+
+            threads = cur.fetchall()
+
+    return [thread[0] for thread in threads]
