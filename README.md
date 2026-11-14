@@ -1,6 +1,6 @@
 # LangGraph Chatbot
 
-A Streamlit app powered by LangGraph and Gemini for PDF Q&A, web search, calculator tools, and persistent chat threads.
+This project is a full-featured Streamlit chatbot built with LangGraph and Google Gemini that helps users interact with documents, the web, and built-in tools in one place. It supports user authentication, persistent chat threads, and separate conversation histories so each user can maintain their own context. Users can upload PDF documents, ask questions about their contents, and receive grounded answers using a retrieval-augmented workflow that splits documents into chunks, embeds them with Gemini, and stores them in a FAISS vector index for semantic search. The assistant can also answer questions using live web search through DuckDuckGo and perform simple arithmetic calculations when needed. With PostgreSQL-backed checkpoints, the app keeps chat state across sessions and supports multi-user usage in a practical AI assistant workflow.
 
 ## Features
 
