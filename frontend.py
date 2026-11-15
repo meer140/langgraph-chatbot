@@ -8,6 +8,7 @@ from langchain_core.messages import (
     AIMessageChunk,
 )
 
+
 # ==================================================
 # 1. PAGE CONFIGURATION AND AUTHENTICATION
 # ==================================================
@@ -29,15 +30,8 @@ if not st.user.is_logged_in:
     st.stop()
 
 
-# Google user ID
 user_id = st.user.sub
 
-
-import backend
-
-
-
-# Import backend after authentication
 from backend import (
     chatbot,
     ingest_pdf,
@@ -90,7 +84,6 @@ def extract_text(content):
 
 def load_conversation(thread_id):
 
-    # Security check
     if not user_owns_thread(user_id, thread_id):
         raise PermissionError("Unauthorized conversation access.")
 
@@ -117,7 +110,6 @@ def load_conversation(thread_id):
 
         elif isinstance(message, AIMessage):
 
-            # Do not display tool-call messages
             if not message.tool_calls and message.content:
 
                 history.append({
@@ -132,6 +124,20 @@ def load_conversation(thread_id):
 # 3. INITIALIZE SESSION
 # ==================================================
 
+# Prevent one authenticated user from seeing another
+# user's previous Streamlit session history.
+
+if st.session_state.get("session_user_id") != user_id:
+
+    thread_id = generate_thread_id()
+
+    create_user_thread(user_id, thread_id)
+
+    st.session_state["session_user_id"] = user_id
+    st.session_state["thread_id"] = thread_id
+    st.session_state["message_history"] = []
+
+
 if "thread_id" not in st.session_state:
 
     thread_id = generate_thread_id()
@@ -142,6 +148,7 @@ if "thread_id" not in st.session_state:
 
 
 # Verify current thread ownership
+
 if not user_owns_thread(user_id, st.session_state["thread_id"]):
 
     thread_id = generate_thread_id()
@@ -149,9 +156,11 @@ if not user_owns_thread(user_id, st.session_state["thread_id"]):
     create_user_thread(user_id, thread_id)
 
     st.session_state["thread_id"] = thread_id
+    st.session_state["message_history"] = []
 
 
-# Restore messages from PostgreSQL checkpoints
+# Restore messages
+
 if "message_history" not in st.session_state:
 
     st.session_state["message_history"] = load_conversation(
@@ -170,16 +179,17 @@ with st.sidebar:
     st.caption(f"Logged in: {st.user.email}")
 
     if st.button("Logout", use_container_width=True):
+
         st.logout()
         st.stop()
 
     st.divider()
 
-    # New conversation
     if st.button("➕ New Chat", use_container_width=True):
         create_new_chat()
 
     st.divider()
+
 
     # --------------------------------------------------
     # PDF UPLOAD
@@ -194,54 +204,59 @@ with st.sidebar:
 
     current_thread = st.session_state["thread_id"]
 
-    if uploaded_file is not None:
+    if thread_has_document(current_thread):
 
-        if thread_has_document(current_thread):
+        metadata = thread_document_metadata(current_thread)
 
-            metadata = thread_document_metadata(current_thread)
+        st.success("A PDF is already indexed for this chat.")
 
-            st.success("A PDF is already indexed for this chat.")
+        with st.expander("Document information"):
 
-            with st.expander("Document information"):
+            st.write("Filename:", metadata.get("filename"))
+            st.write("Pages:", metadata.get("documents"))
+            st.write("Chunks:", metadata.get("chunks"))
 
-                st.write("Filename:", metadata.get("filename"))
-                st.write("Pages:", metadata.get("documents"))
-                st.write("Chunks:", metadata.get("chunks"))
+        st.caption(
+            "One PDF per conversation is currently supported."
+        )
 
-            st.caption(
-                "This backend currently supports one indexed PDF per conversation."
-            )
+    elif uploaded_file is not None:
 
-        else:
+        if st.button(
+            "Process PDF",
+            use_container_width=True
+        ):
 
-            if st.button("Process PDF", use_container_width=True):
+            with st.spinner("Processing PDF..."):
 
-                with st.spinner("Processing PDF..."):
+                try:
 
-                    try:
-
-                        if not user_owns_thread(user_id, current_thread):
-                            raise PermissionError(
-                                "Unauthorized conversation access."
-                            )
-
-                        result = ingest_pdf(
-                            file_bytes=uploaded_file.getvalue(),
-                            thread_id=current_thread,
-                            filename=uploaded_file.name
+                    if not user_owns_thread(user_id, current_thread):
+                        raise PermissionError(
+                            "Unauthorized conversation access."
                         )
 
-                        st.success("PDF processed successfully!")
+                    result = ingest_pdf(
+                        file_bytes=uploaded_file.getvalue(),
+                        thread_id=current_thread,
+                        filename=uploaded_file.name
+                    )
 
-                        st.write("Filename:", result["filename"])
-                        st.write("Pages:", result["documents"])
-                        st.write("Chunks:", result["chunks"])
+                    st.success("PDF processed successfully!")
 
-                    except Exception as e:
+                    st.write("Filename:", result["filename"])
+                    st.write("Pages:", result["documents"])
+                    st.write("Chunks:", result["chunks"])
 
-                        st.error(f"PDF processing failed: {e}")
+                    st.rerun()
+
+                except Exception as e:
+
+                    st.error(f"PDF processing failed: {e}")
+
 
     st.divider()
+
 
     # --------------------------------------------------
     # PREVIOUS CONVERSATIONS
@@ -288,7 +303,9 @@ st.caption(
     f"Thread ID: {st.session_state['thread_id']}"
 )
 
-# Display previous messages
+
+# Display conversation history
+
 for message in st.session_state["message_history"]:
 
     with st.chat_message(message["role"]):
@@ -306,22 +323,25 @@ if user_input:
 
     thread_id = st.session_state["thread_id"]
 
-    # Verify ownership before invoking chatbot
     if not user_owns_thread(user_id, thread_id):
 
         st.error("Unauthorized conversation access.")
         st.stop()
 
+
     # Display user message
+
     with st.chat_message("user"):
 
         st.markdown(user_input)
+
 
     CONFIG = {
         "configurable": {
             "thread_id": thread_id
         }
     }
+
 
     with st.chat_message("assistant"):
 
@@ -342,16 +362,17 @@ if user_input:
                 config=CONFIG,
 
                 stream_mode="messages"
+
             ):
 
-                # Only display AI-generated messages
                 if not isinstance(
                     message_chunk,
                     (AIMessageChunk, AIMessage)
                 ):
                     continue
 
-                # Ignore tool-call messages
+                # Ignore tool calls
+
                 if getattr(message_chunk, "tool_calls", None):
                     continue
 
@@ -365,9 +386,12 @@ if user_input:
                         full_response + "▌"
                     )
 
+
             response_placeholder.markdown(full_response)
 
-            # Reload conversation from PostgreSQL
+
+            # Restore complete conversation from PostgreSQL
+
             st.session_state["message_history"] = load_conversation(
                 thread_id
             )
