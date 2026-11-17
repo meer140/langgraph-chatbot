@@ -1,72 +1,76 @@
 # LangGraph Chatbot
 
-This project is a full-featured Streamlit chatbot built with LangGraph and Google Gemini that helps users interact with documents, the web, and built-in tools in one place. It supports user authentication, persistent chat threads, and separate conversation histories so each user can maintain their own context.
-
-Users can upload PDF documents, ask questions about their contents, and receive grounded answers using a retrieval-augmented workflow that splits documents into chunks, embeds them with Gemini, and stores them in a FAISS vector index for semantic search. The assistant can also answer questions using web search through DuckDuckGo and perform simple arithmetic calculations when needed. 
-
-It also includes short-term conversation memory: as a chat grows, the workflow summarizes earlier messages into a concise memory and removes older messages from the active history to help keep context and token use smaller. PostgreSQL-backed checkpoints persist chat state across sessions.
+A Streamlit chatbot built with LangGraph and Google Gemini. Ask questions about uploaded PDFs, search the web, and use a calculator—all in one chat app. Conversation state and PDF embeddings are persisted in PostgreSQL.
 
 ## Features
 
-- Upload and ask questions about PDFs
+- Upload PDFs and ask questions grounded in their contents
+- Store and search document embeddings in PostgreSQL with **pgvector** (replacing FAISS)
+- Keep PDF retrieval scoped to the current conversation
 - Use Gemini-powered chat with tool calling
-- Summarize earlier conversation messages into compact short-term memory as the chat grows
+- Summarize older messages into short-term conversation memory
 - Search the web with DuckDuckGo
-- Run basic arithmetic through a calculator tool
+- Perform basic arithmetic with a calculator tool
 - Keep separate chat histories per user with PostgreSQL checkpoints
 
-## Tech Stack
+## Tech stack
 
-- Python
-- Streamlit
-- LangGraph
-- LangChain
-- Google Gemini
-- FAISS
+- Python and Streamlit
+- LangGraph and LangChain
+- Google Gemini for chat and embeddings
+- PostgreSQL with the pgvector extension, using LangChain's `PGVector` integration
 - PyPDF
-- PostgreSQL
+- DuckDuckGo Search
 
 ## Setup
 
-1. Create a virtual environment and install dependencies:
+1. Create and activate a Python virtual environment, then install the dependencies:
 
-```bash
-pip install streamlit langgraph langchain-core langchain-community langchain-google-genai langchain-text-splitters faiss-cpu pypdf python-dotenv psycopg psycopg-pool duckduckgo-search
-```
+   ```bash
+   pip install streamlit langgraph langchain-core langchain-community langchain-google-genai langchain-text-splitters langchain-postgres pypdf python-dotenv 'psycopg[binary]' psycopg-pool duckduckgo-search
+   ```
 
-2. Add a `.env` file:
+2. Set up a PostgreSQL database with the **pgvector extension** installed and enabled. The application does not create the extension automatically. For example, with a database role that has permission:
 
-```bash
-GOOGLE_API_KEY=your_google_gemini_api_key
-DB_URI=postgresql://username:password@host:5432/database_name
-```
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
 
-3. Start the app:
+3. Create a `.env` file in the project directory:
 
-```bash
-streamlit run frontend.py
-```
+   ```dotenv
+   GOOGLE_API_KEY=your_google_gemini_api_key
+   DB_URI=postgresql://username:password@host:5432/database_name
+   ```
 
-## Project Structure
+   `DB_URI` is used for both LangGraph checkpointing and the PostgreSQL vector store.
+
+4. Start the app:
+
+   ```bash
+   streamlit run frontend.py
+   ```
+
+## Project structure
 
 ```text
 .
 ├── backend.py
 ├── frontend.py
 ├── README.md
-├── .gitignore
+└── .gitignore
 ```
 
 ## How it works
 
-- `backend.py` contains the LangGraph workflow, tool definitions, PDF ingestion, conversation summarization, and Postgres checkpointing.
-- `frontend.py` handles authentication, chat UI, PDF upload, and thread management.
-- Uploaded PDFs are split into chunks, embedded with Gemini, and stored in a FAISS vector index per thread.
-- When the conversation exceeds the message threshold, the workflow summarizes earlier messages and removes them from the active message history to limit its size.
-- The assistant can answer questions from the document, search the web, or do arithmetic when needed.
+- `backend.py` defines the LangGraph workflow, tools, PDF ingestion and retrieval, conversation summarization, and PostgreSQL checkpointing.
+- `frontend.py` provides the authentication, chat interface, PDF upload, and thread management.
+- Uploaded PDFs are split into chunks, embedded with Gemini, and stored in PostgreSQL through `PGVector`. Retrieval filters by conversation thread so results come from the current chat's documents.
+- As a conversation grows, earlier messages are summarized and removed from the active message history.
+- The assistant can retrieve information from uploaded documents, search the web, or perform arithmetic when appropriate.
 
 ## Notes
 
-- The app requires a logged-in user session.
-- Only one PDF is indexed per chat thread in the current implementation.
-- The database must be available before launching the app.
+- A logged-in user session is required.
+- Multiple PDFs can be uploaded to a conversation.
+- PostgreSQL, with pgvector enabled, must be available before launching the app.
