@@ -1,5 +1,14 @@
 # LangGraph Chatbot
 
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1C1C1C?style=for-the-badge&logo=react&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1F8FFF?style=for-the-badge&logo=langchain&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8A2BE2?style=for-the-badge&logo=google&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![pgvector](https://img.shields.io/badge/pgvector-00C7B7?style=for-the-badge&logo=postgresql&logoColor=white)
+![PyPDF](https://img.shields.io/badge/PyPDF-4B8BBE?style=for-the-badge&logo=python&logoColor=white)
+
 A Streamlit chatbot built with LangGraph and Google Gemini. Ask questions about uploaded PDFs, search the web, and use a calculator—all in one chat app. Conversation state and PDF embeddings are persisted in PostgreSQL.
 
 ## Features
