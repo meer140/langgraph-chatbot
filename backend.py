@@ -95,13 +95,14 @@ with pool.connection() as conn:
         # PDF metadata and ingestion status
         cur.execute("""
             CREATE TABLE IF NOT EXISTS app_thread_documents (
-                thread_id TEXT PRIMARY KEY,
-                document_id TEXT NOT NULL UNIQUE,
-                filename TEXT NOT NULL,
-                documents INTEGER NOT NULL,
-                chunks INTEGER NOT NULL,
-                status TEXT NOT NULL DEFAULT 'processing',
-                created_at TIMESTAMPTZ DEFAULT NOW()
+            thread_id TEXT NOT NULL,
+            document_id TEXT NOT NULL UNIQUE,
+            filename TEXT NOT NULL,
+            documents INTEGER NOT NULL,
+            chunks INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'processing',
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (thread_id, document_id)
             );
         """)
 
@@ -165,7 +166,7 @@ def ingest_pdf(
     Load a PDF, split it into chunks, and store its embeddings
     in PostgreSQL using PGVector.
 
-    Each conversation can have one PDF.
+    Each conversation can have multiple PDFs.
     """
 
     if not file_bytes:
@@ -232,7 +233,7 @@ def ingest_pdf(
                         status
                     )
                     VALUES (%s, %s, %s, %s, %s, 'processing')
-                    ON CONFLICT (thread_id) DO NOTHING
+                    ON CONFLICT (thread_id, document_id) DO NOTHING
                     RETURNING thread_id;
                     """,
                     (
@@ -245,13 +246,6 @@ def ingest_pdf(
                 )
 
                 reservation = cur.fetchone()
-
-                if reservation is None:
-                    raise ValueError(
-                        "A PDF is already uploaded or being processed "
-                        "for this conversation."
-                    )
-
                 reservation_created = True
 
         # ----------------------------------------------------
@@ -378,38 +372,32 @@ def thread_has_document(thread_id: str) -> bool:
 # 7. GET PDF METADATA
 # ============================================================
 
-def thread_document_metadata(thread_id: str) -> dict:
+def thread_document_metadata(thread_id: str) -> list:
 
     with pool.connection() as conn:
         with conn.cursor() as cur:
 
             cur.execute(
                 """
-                SELECT
-                    filename,
-                    documents,
-                    chunks,
-                    created_at,
-                    status
+                SELECT filename, documents, chunks, status
                 FROM app_thread_documents
                 WHERE thread_id = %s
-                AND status = 'ready';
+                ORDER BY created_at DESC;
                 """,
                 (str(thread_id),),
             )
 
-            result = cur.fetchone()
+            rows = cur.fetchall()
 
-    if not result:
-        return {}
-
-    return {
-        "filename": result[0],
-        "documents": result[1],
-        "chunks": result[2],
-        "created_at": result[3],
-        "status": result[4],
-    }
+            return [
+                {
+                    "filename": row[0],
+                    "documents": row[1],
+                    "chunks": row[2],
+                    "status": row[3],
+                }
+                for row in rows
+            ]
 
 
 # ============================================================
@@ -464,20 +452,23 @@ def rag_tool(
     metadata = []
 
     for doc in results:
-
         context.append(doc.page_content)
 
         metadata.append({
             "filename": doc.metadata.get("filename"),
             "page": doc.metadata.get("page"),
             "chunk_index": doc.metadata.get("chunk_index"),
+            "document_id": doc.metadata.get("document_id"),
         })
 
     return {
         "query": query,
         "context": context,
         "metadata": metadata,
-        "source_file": metadata[0].get("filename"),
+        "source_files": list({
+            item["filename"] for item in metadata
+            if item["filename"]
+        }),
     }
 
 

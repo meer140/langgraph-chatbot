@@ -195,65 +195,93 @@ with st.sidebar:
     # PDF UPLOAD
     # --------------------------------------------------
 
-    st.subheader("Upload PDF")
+    st.subheader("Upload PDFs")
 
-    uploaded_file = st.file_uploader(
-        "Choose a PDF file",
-        type=["pdf"]
-    )
+    # Initialize uploader key
+    if "uploader_key" not in st.session_state:
+        st.session_state["uploader_key"] = 0
 
     current_thread = st.session_state["thread_id"]
 
-    if thread_has_document(current_thread):
+    uploaded_files = st.file_uploader(
+        "Choose PDF files",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key=f"pdf_uploader_{st.session_state['uploader_key']}"
+    )
 
-        metadata = thread_document_metadata(current_thread)
+    if uploaded_files:
 
-        st.success("A PDF is already indexed for this chat.")
+        if st.button("Process PDFs", use_container_width=True):
 
-        with st.expander("Document information"):
+            if not user_owns_thread(user_id, current_thread):
+                st.error("Unauthorized conversation access.")
+                st.stop()
 
-            st.write("Filename:", metadata.get("filename"))
-            st.write("Pages:", metadata.get("documents"))
-            st.write("Chunks:", metadata.get("chunks"))
+            successful = 0
+            failed = 0
 
-        st.caption(
-            "One PDF per conversation is currently supported."
-        )
-
-    elif uploaded_file is not None:
-
-        if st.button(
-            "Process PDF",
-            use_container_width=True
-        ):
-
-            with st.spinner("Processing PDF..."):
+            for pdf in uploaded_files:
 
                 try:
+                    with st.spinner(f"Processing {pdf.name}..."):
 
-                    if not user_owns_thread(user_id, current_thread):
-                        raise PermissionError(
-                            "Unauthorized conversation access."
+                        result = ingest_pdf(
+                            file_bytes=pdf.getvalue(),
+                            thread_id=current_thread,
+                            filename=pdf.name
                         )
 
-                    result = ingest_pdf(
-                        file_bytes=uploaded_file.getvalue(),
-                        thread_id=current_thread,
-                        filename=uploaded_file.name
+                    successful += 1
+
+                    st.success(
+                        f"{result['filename']} processed successfully. "
+                        f"Pages: {result['documents']}, "
+                        f"Chunks: {result['chunks']}"
                     )
-
-                    st.success("PDF processed successfully!")
-
-                    st.write("Filename:", result["filename"])
-                    st.write("Pages:", result["documents"])
-                    st.write("Chunks:", result["chunks"])
-
-                    st.rerun()
 
                 except Exception as e:
 
-                    st.error(f"PDF processing failed: {e}")
+                    failed += 1
 
+                    st.error(
+                        f"Failed to process {pdf.name}: {e}"
+                    )
+
+            st.info(
+                f"Processing completed: {successful} successful, "
+                f"{failed} failed."
+            )
+
+            # Reset uploader by assigning a new widget key
+            st.session_state["uploader_key"] += 1
+
+            st.rerun()
+
+
+    st.divider()
+
+    # --------------------------------------------------
+    # DISPLAY UPLOADED DOCUMENTS
+    # --------------------------------------------------
+
+    st.subheader("Uploaded Documents")
+
+    metadata = thread_document_metadata(current_thread)
+
+    if metadata:
+
+        for document in metadata:
+
+            with st.expander(document["filename"]):
+
+                st.write("Pages:", document["documents"])
+                st.write("Chunks:", document["chunks"])
+                st.write("Status:", document["status"])
+
+    else:
+
+        st.caption("No PDFs uploaded in this conversation.")
 
     st.divider()
 
