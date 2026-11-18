@@ -39,7 +39,7 @@ import uuid
 # 1. ENVIRONMENT AND MODELS
 # ============================================================
 
-load_dotenv()
+load_dotenv(override=True)
 
 model = ChatGoogleGenerativeAI(
     model="gemini-3.5-flash-lite"
@@ -83,26 +83,41 @@ checkPointer.setup()
 with pool.connection() as conn:
     with conn.cursor() as cur:
 
+        # User information
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS app_users (
+                user_id TEXT PRIMARY KEY,
+                name TEXT,
+                email TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
+
         # User and thread ownership
         cur.execute("""
             CREATE TABLE IF NOT EXISTS app_user_threads (
                 user_id TEXT NOT NULL,
                 thread_id TEXT PRIMARY KEY,
-                created_at TIMESTAMPTZ DEFAULT NOW()
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+
+                CONSTRAINT fk_user_threads_user
+                FOREIGN KEY (user_id)
+                REFERENCES app_users(user_id)
+                ON DELETE CASCADE
             );
         """)
 
         # PDF metadata and ingestion status
         cur.execute("""
             CREATE TABLE IF NOT EXISTS app_thread_documents (
-            thread_id TEXT NOT NULL,
-            document_id TEXT NOT NULL UNIQUE,
-            filename TEXT NOT NULL,
-            documents INTEGER NOT NULL,
-            chunks INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'processing',
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            PRIMARY KEY (thread_id, document_id)
+                thread_id TEXT NOT NULL,
+                document_id TEXT NOT NULL UNIQUE,
+                filename TEXT NOT NULL,
+                documents INTEGER NOT NULL,
+                chunks INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'processing',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (thread_id, document_id)
             );
         """)
 
@@ -737,6 +752,19 @@ chatbot = graph.compile(
 # ============================================================
 # 17. THREAD MANAGEMENT
 # ============================================================
+def register_user(user_id: str, name: str, email: str):
+
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+
+            cur.execute("""
+                INSERT INTO app_users (user_id, name, email)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id)
+                DO UPDATE SET
+                    name = EXCLUDED.name,
+                    email = EXCLUDED.email;
+            """, (user_id, name, email))
 
 def retrieve_all_threads():
 

@@ -30,8 +30,6 @@ if not st.user.is_logged_in:
     st.stop()
 
 
-user_id = st.user.sub
-
 from backend import (
     chatbot,
     ingest_pdf,
@@ -39,8 +37,18 @@ from backend import (
     retrieve_user_threads,
     user_owns_thread,
     thread_document_metadata,
+    register_user,
     thread_has_document,
 )
+
+user_id = st.user.sub
+
+register_user(
+    user_id=user_id,
+    name=st.user.name,
+    email=st.user.email
+)
+
 
 
 # ==================================================
