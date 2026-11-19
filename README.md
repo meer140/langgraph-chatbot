@@ -18,6 +18,7 @@ A Streamlit chatbot built with LangGraph and Google Gemini. Ask questions about 
 - Keep PDF retrieval scoped to the current conversation
 - Use Gemini-powered chat with tool calling
 - Summarize older messages into short-term conversation memory
+- Retrieve long-term memories across conversations
 - Search the web with DuckDuckGo
 - Perform basic arithmetic with a calculator tool
 - Keep separate chat histories per user with PostgreSQL checkpoints
@@ -39,7 +40,7 @@ A Streamlit chatbot built with LangGraph and Google Gemini. Ask questions about 
    pip install streamlit langgraph langchain-core langchain-community langchain-google-genai langchain-text-splitters langchain-postgres pypdf python-dotenv 'psycopg[binary]' psycopg-pool duckduckgo-search
    ```
 
-2. Set up a PostgreSQL database with the **pgvector extension** installed and enabled. The application does not create the extension automatically. For example, with a database role that has permission:
+2. Set up a PostgreSQL database with the **pgvector extension** installed and enabled. The application does not create the extension automatically. For example, with a database role that has permission to create extensions:
 
    ```sql
    CREATE EXTENSION IF NOT EXISTS vector;
@@ -77,6 +78,10 @@ A Streamlit chatbot built with LangGraph and Google Gemini. Ask questions about 
 - Uploaded PDFs are split into chunks, embedded with Gemini, and stored in PostgreSQL through `PGVector`. Retrieval filters by conversation thread so results come from the current chat's documents.
 - As a conversation grows, earlier messages are summarized and removed from the active message history.
 - The assistant can retrieve information from uploaded documents, search the web, or perform arithmetic when appropriate.
+
+## Pipeline
+
+![LangGraph workflow pipeline](pipeline.svg)
 
 ## Notes
 
