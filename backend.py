@@ -42,7 +42,7 @@ import uuid
 # 1. ENVIRONMENT AND MODELS
 # ============================================================
 
-load_dotenv(override=True)
+load_dotenv()
 
 model = ChatGoogleGenerativeAI(
     model="gemini-3.5-flash-lite"

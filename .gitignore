@@ -2,4 +2,6 @@ __pycache__
 chats.db
 .streamlit
 chats.db-shm
+.env
 chats.db-wal
+.venv/
