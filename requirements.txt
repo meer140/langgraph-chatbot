@@ -2,6 +2,7 @@
 
 streamlit==1.64.0
 python-dotenv==1.2.3
+streamlit[auth]==1.64.0
 
 # Build dependencies
 setuptools
