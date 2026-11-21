@@ -14,4 +14,4 @@ COPY . .
 EXPOSE 8501
 
 # Start Streamlit
-CMD ["sh", "-c", "streamlit run frontend.py --server.address=0.0.0.0 --server.port=${PORT:-8501} --server.headless=true"]
+CMD ["sh", "-c", "mkdir -p /app/.streamlit && cp /etc/secrets/secrets.toml /app/.streamlit/secrets.toml && streamlit run frontend.py --server.address=0.0.0.0 --server.port=${PORT:-8501} --server.headless=true"]
